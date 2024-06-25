@@ -37,4 +37,7 @@ curl "http://VERAIP:3480/data_request?id=action&serviceId=urn:micasaverde-com:se
 ## Other Information ##
 
 The implementation has been tested on Aidon 7534 Smart Meter.
-BME280 showed elevated temperature readings that have compesated via hardcoded constant (-4 Degress) in the code. 
+BME280 showed elevated temperature readings that have compensated via hardcoded constant (-4 Degress) in the code. 
+
+
+[SESKO SK 13-1:2022 Suositus sähköenergiamittareiden paikallista asiakasrajapintaa varten](https://sesko.fi/wp-content/uploads/2022/12/Suositus-SK-13-1_H1-asiakasrajapinta_suomenkielinen_2022-12-13.pdf)
