@@ -703,8 +703,13 @@ void loop()
     read_p1_hardwareserial();
     getRSSI();
     ReadTempSensor(); 
-    send_data_to_vera(); 
-    send_data_to_collectd();
+
+    // Only send measurements if we have data
+    if (CONSUMPTION > 0) {
+      send_data_to_vera(); 
+      send_data_to_collectd();
+    }
+    
     LAST_UPDATE_SENT = millis();
     }  
 }
