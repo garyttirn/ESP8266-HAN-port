@@ -56,12 +56,12 @@ Adafruit_BME280  bme280;  // initialize Adafruit BME280 library
 // * Include settings
 #include "settings.h"
 
-float glb_temp=0,glb_hum=0,glb_pres=0 ;
+float glb_temp=0.0,glb_hum=0.0,glb_pres=0.0 ;
 int glb_batterylevel=100;
-long glb_rssi=0;
+long glb_rssi=0.0;
 
 //metric packet to send to collectd for detailed readings
-struct collectd_packet *packet = collectd_init_packet("han", 30000);
+struct collectd_packet *packet = collectd_init_packet((char*) "han", 32768);
 
 // * Initiate ezTime library
 Timezone myTZ;
@@ -238,48 +238,67 @@ void send_data_to_collectd (void)
   WebSerial.printf("\nSending collected packet...");
 
   collectd_add_numeric(packet, TYPE_TIME, now());
-  collectd_add_string(packet, TYPE_PLUGIN, "HAN");
-  collectd_add_string(packet, TYPE_TYPE, "gauge");
+  collectd_add_string(packet, TYPE_PLUGIN,(char*) "HAN");
+  collectd_add_string(packet, TYPE_TYPE,(char*) "gauge");
 
+  //Temperature
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE, (char*) "temp");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &glb_temp);
+
+  //Humidity
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE, (char*) "hum");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &glb_hum);
+
+  //Barometer
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE, (char*) "pres");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &glb_pres);
+
+  //RSSI
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE, (char*) "rssi");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &glb_rssi);
+
+  //Battery
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "bat");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &glb_batterylevel);
   //kWh
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "CONSUMPTION");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &CONSUMPTION);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "CONSUMPTION");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &CONSUMPTION);
 
  //kvarh
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "ACTIVE_POWER_REACT");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &ACTIVE_POWER_REACT);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*)"ACTIVE_POWER_REACT");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &ACTIVE_POWER_REACT);
 
   //Watts
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "ACTIVE_POWER");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &ACTIVE_POWER);
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "L1_INSTANT_POWER_USAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L1_INSTANT_POWER_USAGE);
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "L2_INSTANT_POWER_USAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L2_INSTANT_POWER_USAGE);
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "L3_INSTANT_POWER_USAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L3_INSTANT_POWER_USAGE);
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "L1_REACT_POWER_USAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L1_REACT_POWER_USAGE);
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "L2_REACT_POWER_USAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L2_REACT_POWER_USAGE);
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "L3_REACT_POWER_USAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L3_REACT_POWER_USAGE);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "ACTIVE_POWER");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &ACTIVE_POWER);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L1_INSTANT_POWER_USAGE");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L1_INSTANT_POWER_USAGE);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L2_INSTANT_POWER_USAGE");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L2_INSTANT_POWER_USAGE);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L3_INSTANT_POWER_USAGE");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L3_INSTANT_POWER_USAGE);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L1_REACT_POWER_USAGE");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L1_REACT_POWER_USAGE);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L2_REACT_POWER_USAGE");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L2_REACT_POWER_USAGE);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L3_REACT_POWER_USAGE");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L3_REACT_POWER_USAGE);
 
   //Amps
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "L1_INSTANT_POWER_CURRENT");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L1_INSTANT_POWER_CURRENT);
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "L2_INSTANT_POWER_CURRENT");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L2_INSTANT_POWER_CURRENT);
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "L3_INSTANT_POWER_CURRENT");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L3_INSTANT_POWER_CURRENT);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L1_INSTANT_POWER_CURRENT");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L1_INSTANT_POWER_CURRENT);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L2_INSTANT_POWER_CURRENT");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L2_INSTANT_POWER_CURRENT);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L3_INSTANT_POWER_CURRENT");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L3_INSTANT_POWER_CURRENT);
 
   //Volts
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "L1_VOLTAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L1_VOLTAGE);
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "L2_VOLTAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L2_VOLTAGE);
-  collectd_add_string(packet, TYPE_TYPE_INSTANCE, "L3_VOLTAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L3_VOLTAGE);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L1_VOLTAGE");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L1_VOLTAGE);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L2_VOLTAGE");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L2_VOLTAGE);
+  collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L3_VOLTAGE");
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L3_VOLTAGE);
   
   Serial.println( "Sending packet to " + String(CollectdIP[0]) + "." + String(CollectdIP[1]) + "." + String(CollectdIP[2]) + "." + String(CollectdIP[3]) + ":" +  String(CollectdPort));
   
@@ -287,7 +306,7 @@ void send_data_to_collectd (void)
   udp_handler.write(packet->buffer, packet->current_offset);
   udp_handler.endPacket();
   
- collectd_reset_packet(packet,"han");
+ collectd_reset_packet(packet,(char*)"han");
 }
 
 // **********************************

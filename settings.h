@@ -15,7 +15,7 @@ const char* VeraBaseURL = "http://192.168.1.2:3480/";
 const char* UpdateURL = "http://192.168.1.3:4080/8266OTA.php";
 const IPAddress CollectdIP = {192,168,255,3};
 const char* CollectdPort = "25826";
-const char* FWVersion = "13062024";
+const char* FWVersion = "25072026";
 
 // Update treshold in milliseconds, messages will only be sent on this interval
 #define UPDATE_INTERVAL 30000  // 30s
