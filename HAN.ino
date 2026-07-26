@@ -56,9 +56,8 @@ Adafruit_BME280  bme280;  // initialize Adafruit BME280 library
 // * Include settings
 #include "settings.h"
 
-float glb_temp=0.0,glb_hum=0.0,glb_pres=0.0 ;
-int glb_batterylevel=100;
-long glb_rssi=0.0;
+double glb_temp=0.0,glb_hum=0.0,glb_pres=0.0, glb_rssi=0.0;
+double glb_batterylevel=100;
 
 //metric packet to send to collectd for detailed readings
 struct collectd_packet *packet = collectd_init_packet((char*) "han", 32768);
