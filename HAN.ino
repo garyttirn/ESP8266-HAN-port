@@ -1,6 +1,6 @@
 
 /**
- * ESP8266 Power Meter HAN-Port H1 reader with Vera (https://home.getvera.com/) and collectd (influxDB) integration.
+ * ESP8266 Power Meter HAN-Port H1 reader with collectd (Telegraf/influxDB 1.x) integration.
  *
  * Partly based on
  *  https://github.com/UdoK/esp8266_p1meter_sv
@@ -8,16 +8,6 @@
  *  https://github.com/Lestat-GitHub/CollectdPacket
  *
  * To be powered by the Power Meter 
- * 
- * Create vera devices :
- * Temperature sensor :
- *   curl "http://VERAIP:3480/data_request?id=action&serviceId=urn:micasaverde-com:serviceId:HomeAutomationGateway1&action=CreateDevice&deviceType=urn:schemas-micasaverde-com:device:TemperatureSensor:1&internalID=&Description=WiFiTemp1&UpnpDevFilename=D_TemperatureSensor1.xml&UpnpImplFilename=&MacAddress=&RoomNum=0&Reload=1&IpAddress="
- * Humidity sensor :
- *   curl "http://VERAIP:3480/data_request?id=action&serviceId=urn:micasaverde-com:serviceId:HomeAutomationGateway1&action=CreateDevice&deviceType=urn:schemas-micasaverde-com:device:HumiditySensor:1&internalID=&Description=WiFiHum1&UpnpDevFilename=D_HumiditySensor1.xml&UpnpImplFilename=&MacAddress=&RoomNum=0&Reload=1&IpAddress="
- * Pressure sensor :
- *   curl "http://VERAIP:3480/data_request?id=action&serviceId=urn:micasaverde-com:serviceId:HomeAutomationGateway1&action=CreateDevice&deviceType=urn:schemas-micasaverde-com:device:BarometerSensor:1&internalID=&Description=WiFiPressure1&UpnpDevFilename=D_BarometerSensor1.xml&UpnpImplFilename=&MacAddress=&RoomNum=0&Reload=1&IpAddress="
- * Power Meter :
- *   curl "http://VERAIP:3480/data_request?id=action&serviceId=urn:micasaverde-com:serviceId:HomeAutomationGateway1&action=CreateDevice&deviceType=urn:schemas-micasaverde-com:device:PowerMeter:1&internalID=&Description=HAN&UpnpDevFilename=D_PowerMeter1.xml&UpnpImplFilename=&MacAddress=&RoomNum=0&Reload=1&IpAddress="
  *
  **/
 
@@ -59,9 +49,6 @@ Adafruit_BME280  bme280;  // initialize Adafruit BME280 library
 double glb_temp=0.0,glb_hum=0.0,glb_pres=0.0, glb_rssi=0.0;
 double glb_batterylevel=100;
 
-//metric packet to send to collectd for detailed readings
-struct collectd_packet *packet = collectd_init_packet((char*) "han", 32768);
-
 // * Initiate ezTime library
 Timezone myTZ;
 
@@ -69,9 +56,6 @@ char time_chbuf[16] = {""};
 
 // * Initiate WIFI client
 WiFiClient client;
-
-// * Initiate HTTP client
-HTTPClient http;
 
 // * Initiate collectd UDP client
 WiFiUDP udp_handler;
@@ -187,57 +171,17 @@ int getRSSI(){
   return 0; 
 }
 
-int GetHttpURL(String MyURL){
-  Serial.print("[HTTP] begin...\n");
-
-  http.begin(client,String(VeraBaseURL) + MyURL);
-    
-  int httpCode = http.GET();
-
-   if (httpCode > 0) {
-     Serial.printf("[HTTP] GET... code: %d\n", httpCode);
-    
-     if (httpCode == HTTP_CODE_OK) {
-        http.writeToStream(&Serial);
-        }
-  }
-  else {
-    Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
-    }
- 
- return httpCode;
-}
-
-//send data to vera
-void send_data_to_vera (void)
-{
-  Serial.println( "\nSending Vera update..." );
-  WebSerial.printf("\nSending Vera update...");
-      
-  http.setReuse(true);
-
-  //Environment
-  GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraTempDeviceID) + "&serviceId=urn:upnp-org:serviceId:TemperatureSensor1&Variable=CurrentTemperature&Value=" + String(glb_temp));
-  GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraTempDeviceID) + "&serviceId=urn:upnp-org:serviceId:TemperatureSensor1&Variable=CurrentRSSI&Value=" + String(glb_rssi));
-  GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraTempDeviceID) + "&serviceId=urn:micasaverde-com:serviceId:HaDevice1&Variable=BatteryLevel&Value=" + String(glb_batterylevel));
-  GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraHumDeviceID) + "&serviceId=urn:micasaverde-com:serviceId:HumiditySensor1&Variable=CurrentLevel&Value=" + String(glb_hum));
-  GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraPresDeviceID) + "&serviceId=urn:upnp-org:serviceId:BarometerSensor1&Variable=CurrentPressure&Value=" + String(glb_pres));
-
-  //Power
-  GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraPowerDeviceID) + "&serviceId=urn:micasaverde-com:serviceId:EnergyMetering1&Variable=KWH&Value=" + String(CONSUMPTION/1000));
-  GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraPowerDeviceID) + "&serviceId=urn:micasaverde-com:serviceId:EnergyMetering1&Variable=Watts&Value=" + String(ACTIVE_POWER));  
-
-  http.end();
-}
-
 //send data to collectd
 void send_data_to_collectd (void)
 {
-  Serial.println("\nSending collected packet...");
-  WebSerial.printf("\nSending collected packet...");
+ //metric packet to send to collectd for detailed readings
+  struct collectd_packet *packet = collectd_init_packet((char*) ESPName, 32768);
+
+  Serial.println("\nPreparing collected packet...");
+  WebSerial.println("\nPreparing collected packet...");
 
   collectd_add_numeric(packet, TYPE_TIME, now());
-  collectd_add_string(packet, TYPE_PLUGIN,(char*) "HAN");
+  collectd_add_string(packet, TYPE_PLUGIN,(char*) "sensor");
   collectd_add_string(packet, TYPE_TYPE,(char*) "gauge");
 
   //Temperature
@@ -269,43 +213,44 @@ void send_data_to_collectd (void)
 
   //Watts
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "ACTIVE_POWER");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &ACTIVE_POWER);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &ACTIVE_POWER);
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L1_INSTANT_POWER_USAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L1_INSTANT_POWER_USAGE);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L1_INSTANT_POWER_USAGE);
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L2_INSTANT_POWER_USAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L2_INSTANT_POWER_USAGE);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L2_INSTANT_POWER_USAGE);
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L3_INSTANT_POWER_USAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L3_INSTANT_POWER_USAGE);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L3_INSTANT_POWER_USAGE);
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L1_REACT_POWER_USAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L1_REACT_POWER_USAGE);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,&L1_REACT_POWER_USAGE);
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L2_REACT_POWER_USAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L2_REACT_POWER_USAGE);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L2_REACT_POWER_USAGE);
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L3_REACT_POWER_USAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L3_REACT_POWER_USAGE);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,&L3_REACT_POWER_USAGE);
 
   //Amps
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L1_INSTANT_POWER_CURRENT");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L1_INSTANT_POWER_CURRENT);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L1_INSTANT_POWER_CURRENT);
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L2_INSTANT_POWER_CURRENT");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L2_INSTANT_POWER_CURRENT);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L2_INSTANT_POWER_CURRENT);
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L3_INSTANT_POWER_CURRENT");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L3_INSTANT_POWER_CURRENT);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L3_INSTANT_POWER_CURRENT);
 
   //Volts
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L1_VOLTAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L1_VOLTAGE);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L1_VOLTAGE);
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L2_VOLTAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L2_VOLTAGE);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L2_VOLTAGE);
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L3_VOLTAGE");
-  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE,(char*) &L3_VOLTAGE);
+  collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L3_VOLTAGE);
   
   Serial.println( "Sending packet to " + String(CollectdIP[0]) + "." + String(CollectdIP[1]) + "." + String(CollectdIP[2]) + "." + String(CollectdIP[3]) + ":" +  String(CollectdPort));
-  
+  WebSerial.println( "Sending packet to " + String(CollectdIP[0]) + "." + String(CollectdIP[1]) + "." + String(CollectdIP[2]) + "." + String(CollectdIP[3]) + ":" +  String(CollectdPort));
+
   udp_handler.beginPacket(CollectdIP, atoi(CollectdPort));
   udp_handler.write(packet->buffer, packet->current_offset);
   udp_handler.endPacket();
   
- collectd_reset_packet(packet,(char*)"han");
+ collectd_reset_packet(packet,(char*) ESPName);
 }
 
 // **********************************
@@ -677,7 +622,7 @@ void setup()
   InitTempSensor(); 
   
   // Init ezTime and sync
-  setServer("fi.pool.ntp.org");
+  setServer(NTPServer);
   waitForSync();
 
   myTZ = UTC;
@@ -724,10 +669,12 @@ void loop()
 
     // Only send measurements if we have data
     if (CONSUMPTION > 0) {
-      send_data_to_vera(); 
       send_data_to_collectd();
     }
     
     LAST_UPDATE_SENT = millis();
+
+    //Small sleep
+    delay (100);
     }  
 }

@@ -1,31 +1,26 @@
 // **********************************
 // * Settings                       *
 // **********************************
-
 const char* WifiSSID      = "SSID";
 const char* WifiPass      = "PASSWORD";
 
-int VeraTempDeviceID = 123;
-int VeraHumDeviceID = 124;
-int VeraPresDeviceID = 125;
-int VeraPowerDeviceID = 126;
-
 const char* ESPName = "p1meter";
-const char* VeraBaseURL = "http://192.168.1.2:3480/";
 const char* UpdateURL = "http://192.168.1.3:4080/8266OTA.php";
+const char* NTPServer = "fi.pool.ntp.org";
+
 const IPAddress CollectdIP = {192,168,255,3};
 const char* CollectdPort = "25826";
-const char* FWVersion = "25072026";
+const char* FWVersion = "01082026";
 
 // Update treshold in milliseconds, messages will only be sent on this interval
 #define UPDATE_INTERVAL 30000  // 30s
 //#define UPDATE_INTERVAL 300000 // 5 minutes
 
-// * Baud rate for both hardware and software 
+// * Baud rate for both hardware and software
 #define BAUD_RATE 115200
 
 // The used serial pins, note that this can only be UART0, as other serial port doesn't support inversion
-// By default the UART0 serial will be used. These settings displayed here just as a reference. 
+// By default the UART0 serial will be used. These settings displayed here just as a reference.
 // #define SERIAL_RX RX
 // #define SERIAL_TX TX
 

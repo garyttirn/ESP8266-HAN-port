@@ -1,5 +1,5 @@
 # ESP8266-HAN-port
-ESP8266 Power Meter HAN-Port H1 reader with Vera (https://home.getvera.com/) and collectd (influxDB) integration.
+ESP8266 Power Meter HAN-Port H1 reader with collectd (Telegraf/influxDB 1.x) integration.
 Also includes BME280 sensor and WebSerial for monitoring.
 
 Partly based on
@@ -8,6 +8,8 @@ Partly based on
  * https://github.com/nuclearcat/collectd-embedded
  * https://github.com/Lestat-GitHub/CollectdPacket
  * https://github.com/asjdf/WebSerialLite
+
+Branch vera contain also Vera integration that is no longer maintained 
 
 ## Circuit ##
 
