@@ -64,6 +64,36 @@ WiFiUDP udp_handler;
 // Initiate HTTP server
 AsyncWebServer server(80);
 
+void SerPrintf(const char *format, ...) {
+  char buffer[256]; 
+  
+  va_list args;
+  va_start(args, format);
+  vsnprintf(buffer, sizeof(buffer), format, args);
+  va_end(args);
+
+  Serial.print(buffer);
+  WebSerial.print(buffer);
+}
+
+void SerPrintfLn(const char *format, ...) {
+  char buffer[256]; 
+  
+  va_list args;
+  va_start(args, format);
+  vsnprintf(buffer, sizeof(buffer), format, args);
+  va_end(args);
+
+  // Uses the native println methods of each object
+  Serial.println(buffer);
+  WebSerial.println(buffer);
+}
+
+void SerPrintfLn(const String &message) {
+  Serial.println(message);
+  WebSerial.println(message);
+}
+
 /* Message callback of WebSerial */
 void recvMsg(uint8_t *data, size_t len){
   WebSerial.println("Received Data...");
@@ -81,26 +111,27 @@ void recvMsg(uint8_t *data, size_t len){
 
 //OTA callback update_started()
 void update_started() {
-  Serial.println("HTTP update process started");
+  SerPrintfLn("HTTP update process started");
 }
 
 //OTA callback update_finished()
 void update_finished() {
-  Serial.println("HTTP update process finished");
+  SerPrintfLn("HTTP update process finished");
 }
 
 //OTA callback update_progress()
 void update_progress(int cur, int total) {
-  Serial.printf("HTTP update process at %d of %d bytes...\n", cur, total);
+  SerPrintf("HTTP update process at %d of %d bytes...\n", cur, total);
 }
 
 //OTA callback update_error()
 void update_error(int err) {
-  Serial.printf("HTTP update fatal error code %d\n", err);
+  SerPrintf("HTTP update fatal error code %d\n", err);
 }
 
 //OTA CHeck
 int checkForUpdates() {
+    ESPhttpUpdate.setLedPin(LED_BUILTIN, LOW);
 
     // Add optional callback notifiers
     ESPhttpUpdate.onStart(update_started);
@@ -108,20 +139,21 @@ int checkForUpdates() {
     ESPhttpUpdate.onProgress(update_progress);
     ESPhttpUpdate.onError(update_error);
     
-    Serial.print("\nChecking for update from " + String(UpdateURL) + ". Current FW version " + String(FWVersion) + "\n");
+    SerPrintfLn("\nChecking for update from " + String(UpdateURL) + ". Current FW version " + String(FWVersion) + "\n");
+
     t_httpUpdate_return ret = ESPhttpUpdate.update(client, String(UpdateURL),String(FWVersion));
 
     switch (ret) {
       case HTTP_UPDATE_FAILED:
-        Serial.printf("HTTP_UPDATE_FAILED Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+        SerPrintf("HTTP_UPDATE_FAILED Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
         break;
 
       case HTTP_UPDATE_NO_UPDATES:
-        Serial.println("HTTP_UPDATE_NO_UPDATES");
+        SerPrintf("HTTP_UPDATE_NO_UPDATES");
         break;
 
       case HTTP_UPDATE_OK:
-        Serial.println("HTTP_UPDATE_OK");
+        SerPrintf("HTTP_UPDATE_OK");
         delay(5000);
         ESP.restart();
         break;
@@ -129,6 +161,7 @@ int checkForUpdates() {
 
 return 0;
 }
+
 void InitTempSensor() {
 bme280.begin(BME280_I2C_ADDRESS);
   
@@ -164,9 +197,10 @@ int ReadTempSensor() {
 
 
 int getRSSI(){
-  glb_rssi=WiFi.RSSI();
-    
-  Serial.println("WiFi RSSI: " + String(glb_rssi) + "dBm");
+  glb_rssi=0.0;
+  glb_rssi= (double) WiFi.RSSI();
+
+  SerPrintfLn("WiFi RSSI: " + String(glb_rssi) + "dBm");
    
   return 0; 
 }
@@ -174,6 +208,9 @@ int getRSSI(){
 //send data to collectd
 void send_data_to_collectd (void)
 {
+ //UDP socket send status
+ int s=0; 
+
  //metric packet to send to collectd for detailed readings
   struct collectd_packet *packet = collectd_init_packet((char*) ESPName, 32768);
 
@@ -243,14 +280,30 @@ void send_data_to_collectd (void)
   collectd_add_string(packet, TYPE_TYPE_INSTANCE,(char*) "L3_VOLTAGE");
   collectd_add_value(packet, COLLECTD_VALUETYPE_GAUGE, &L3_VOLTAGE);
   
-  Serial.println( "Sending packet to " + String(CollectdIP[0]) + "." + String(CollectdIP[1]) + "." + String(CollectdIP[2]) + "." + String(CollectdIP[3]) + ":" +  String(CollectdPort));
-  WebSerial.println( "Sending packet to " + String(CollectdIP[0]) + "." + String(CollectdIP[1]) + "." + String(CollectdIP[2]) + "." + String(CollectdIP[3]) + ":" +  String(CollectdPort));
+  SerPrintfLn("Sending packet to " + String(CollectdIP[0]) + "." + String(CollectdIP[1]) + "." + String(CollectdIP[2]) + "." + String(CollectdIP[3]) + ":" +  String(CollectdPort));
 
-  udp_handler.beginPacket(CollectdIP, atoi(CollectdPort));
-  udp_handler.write(packet->buffer, packet->current_offset);
-  udp_handler.endPacket();
-  
- collectd_reset_packet(packet,(char*) ESPName);
+  //Init collectd UDP client
+  udp_handler.begin(atoi(CollectdPort)); 
+
+  if ( udp_handler.beginPacket(CollectdIP, atoi(CollectdPort)) == 1) {
+    // 2. Check if the entire payload fit into the software buffer
+    if (udp_handler.write(packet->buffer, packet->current_offset) == packet->current_offset) {
+      // 3. Check if the network stack successfully sent the frame
+      if (udp_handler.endPacket() == 1) {
+        // SUCCESS: Packet is on its way out of the antenna
+       SerPrintfLn("UDP Sent OK");
+        delay(30);  // Let the physical hardware finish transmitting
+      } else {
+        // Hardware/Routing error (e.g., ARP resolution failed)
+        SerPrintfLn("UDP Sent failed!!!");
+      }
+    } else {
+      // Buffer allocation error (Out of memory)
+      SerPrintfLn("UDP Write failed!!!");
+    }
+  }
+
+  collectd_reset_packet(packet,(char*)ESPName);
 }
 
 // **********************************
@@ -615,6 +668,18 @@ void setup()
   Serial.println("");
   Serial.println("WiFi connected");
 
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  //WebSerial
+  WebSerial.begin(&server);
+  /* Attach Message Callback */
+  WebSerial.onMessage(recvMsg);
+  server.begin();
+
+  WebSerial.print(F("IP address: "));
+  WebSerial.println(WiFi.localIP().toString());
+
   //OTA Check
   checkForUpdates();
 
@@ -630,17 +695,6 @@ void setup()
   //Init collectd UDP client
   udp_handler.begin(atoi(CollectdPort)); 
 
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
-
-  //WebSerial
-  WebSerial.begin(&server);
-  /* Attach Message Callback */
-  WebSerial.onMessage(recvMsg);
-  server.begin();
-
-  WebSerial.print(F("IP address: "));
-  WebSerial.println(WiFi.localIP().toString());
   Serial.println("Read loop started");
   WebSerial.printf("Read loop started");
 }
@@ -655,16 +709,22 @@ void loop()
 
   long now = millis();
 
-  if (now - LAST_UPDATE_SENT > UPDATE_INTERVAL) {
+  // always read serial
+  if (Serial.available() > 0) {
+    read_p1_hardwareserial();
+  }
+
+  if (now - LAST_UPDATE_SENT > UPDATE_INTERVAL ) {
     // Length (with one extra character for the null terminator)
     int str_len = myTZ.dateTime("G:i").length() + 1; 
     myTZ.dateTime("G:i").toCharArray(time_chbuf,str_len);
 
+    read_p1_hardwareserial();
+    getRSSI();
+
     Serial.printf("\nTime now: %sZ\nReading BME280 sensor values\n",time_chbuf);
     WebSerial.printf("\nTime now: %sZ\nReading BME280 sensor values\n",time_chbuf);
   
-    read_p1_hardwareserial();
-    getRSSI();
     ReadTempSensor(); 
 
     // Only send measurements if we have data
@@ -675,6 +735,6 @@ void loop()
     LAST_UPDATE_SENT = millis();
 
     //Small sleep
-    delay (100);
+    delay (10);
     }  
 }
