@@ -1,4 +1,4 @@
-
+'
 /**
  * ESP8266 Power Meter HAN-Port H1 reader with collectd (Telegraf/influxDB 1.x) integration.
  *
@@ -29,7 +29,7 @@
 #include <WebSerialLite.h>
 
 //Larger Serial buffer
-#define SERIAL_BUFFER_SIZE 1024
+#define SERIAL_BUFFER_SIZE P1_MAXLINELENGTH
 
 #define BME280_I2C_ADDRESS 0x76
 // ESP8266 PIN 4 SDA
@@ -48,6 +48,7 @@ Adafruit_BME280  bme280;  // initialize Adafruit BME280 library
 
 double glb_temp=0.0,glb_hum=0.0,glb_pres=0.0, glb_rssi=0.0;
 double glb_batterylevel=100;
+bool glb_debug=true;
 
 // * Initiate ezTime library
 Timezone myTZ;
@@ -64,20 +65,11 @@ WiFiUDP udp_handler;
 // Initiate HTTP server
 AsyncWebServer server(80);
 
-void SerPrintf(const char *format, ...) {
-  char buffer[256]; 
-  
-  va_list args;
-  va_start(args, format);
-  vsnprintf(buffer, sizeof(buffer), format, args);
-  va_end(args);
-
-  Serial.print(buffer);
-  WebSerial.print(buffer);
-}
+// Read own voltage
+ADC_MODE(ADC_VCC);
 
 void SerPrintfLn(const char *format, ...) {
-  char buffer[256]; 
+  char buffer[128];
   
   va_list args;
   va_start(args, format);
@@ -85,27 +77,40 @@ void SerPrintfLn(const char *format, ...) {
   va_end(args);
 
   // Uses the native println methods of each object
-  Serial.println(buffer);
-  WebSerial.println(buffer);
+  if (glb_debug) {
+     Serial.println(buffer);
+     WebSerial.println(buffer);
+  }
 }
 
 void SerPrintfLn(const String &message) {
-  Serial.println(message);
-  WebSerial.println(message);
+  if (glb_debug) {
+     Serial.println(message);
+     WebSerial.println(message);
+  }
 }
 
 /* Message callback of WebSerial */
 void recvMsg(uint8_t *data, size_t len){
+  Serial.println("Received Data...");
   WebSerial.println("Received Data...");
+
   String d = "";
   for(int i=0; i < len; i++){
     d += char(data[i]);
   }
+  Serial.println(d);
   WebSerial.println(d);
 
   if (d == "REBOOT" ) {
     delay (2);
     ESP.restart();
+  }
+
+  if (d == "DEBUG" ) {
+     glb_debug=true;
+     Serial.println("Debug enabled.");
+     WebSerial.println("Debug enabled.");
   }
 }
 
@@ -121,12 +126,12 @@ void update_finished() {
 
 //OTA callback update_progress()
 void update_progress(int cur, int total) {
-  SerPrintf("HTTP update process at %d of %d bytes...\n", cur, total);
+  SerPrintfLn("HTTP update process at %d of %d bytes...\n", cur, total);
 }
 
 //OTA callback update_error()
 void update_error(int err) {
-  SerPrintf("HTTP update fatal error code %d\n", err);
+  SerPrintfLn("HTTP update fatal error code %d\n", err);
 }
 
 //OTA CHeck
@@ -145,15 +150,15 @@ int checkForUpdates() {
 
     switch (ret) {
       case HTTP_UPDATE_FAILED:
-        SerPrintf("HTTP_UPDATE_FAILED Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+        SerPrintfLn("HTTP_UPDATE_FAILED Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
         break;
 
       case HTTP_UPDATE_NO_UPDATES:
-        SerPrintf("HTTP_UPDATE_NO_UPDATES");
+        SerPrintfLn("HTTP_UPDATE_NO_UPDATES");
         break;
 
       case HTTP_UPDATE_OK:
-        SerPrintf("HTTP_UPDATE_OK");
+        SerPrintfLn("HTTP_UPDATE_OK");
         delay(5000);
         ESP.restart();
         break;
@@ -164,43 +169,39 @@ return 0;
 
 void InitTempSensor() {
 bme280.begin(BME280_I2C_ADDRESS);
-  
+Wire.setTimeout(250); // Forces I2C to drop the connection and move on after 250ms if stuck
 bme280.setSampling(Adafruit_BME280::MODE_FORCED, // takeForcedMeasurement must be called before each reading
 Adafruit_BME280::SAMPLING_X1, // Temp. oversampling
 Adafruit_BME280::SAMPLING_X1, // Pressure oversampling
 Adafruit_BME280::SAMPLING_X1, // Humidity oversampling
-Adafruit_BME280::FILTER_OFF,
-Adafruit_BME280::STANDBY_MS_1000);
+Adafruit_BME280::FILTER_OFF);
 }
 
 int ReadTempSensor() {
 
-  //Force sample
   bme280.takeForcedMeasurement();
-  Serial.print("\nRequesting BME280 Sensor data...\n");
-   
+  SerPrintfLn("\nRequesting BME280 Sensor data...\n");
+
+  delay(15); // Physical measurement takes <10ms. 15ms is perfectly safe and lets ESP8266 breathe.
+
   glb_temp = bme280.readTemperature() - 4; // get temperature in °C, offset by 4 degrees.
   glb_hum = bme280.readHumidity(); // get humidity in rH%
   glb_pres = bme280.readPressure() / 100; // get pressure in Pa
 
   // Check if any reads failed
   if (isnan(glb_hum) || isnan(glb_temp) || isnan(glb_pres)) {
-    Serial.println("Failed to read from SME280 sensor!");
-    WebSerial.printf("\nFailed to read from SME280 sensor!");
+    SerPrintfLn("Failed to read from SME280 sensor!");
     return 1;
   }
 
-  Serial.println("Temp: " + String(glb_temp) + "  Hum: " + String(glb_hum) + "  Pres: " + String(glb_pres));
-  WebSerial.printf("\nTemp: %s, Hum: %s, Pres: %s\n",String(glb_temp),String(glb_hum),String(glb_pres));
+  SerPrintfLn("Temp: " + String(glb_temp) + "  Hum: " + String(glb_hum) + "  Pres: " + String(glb_pres));
+
   return 0;
 }
-
 
 int getRSSI(){
   glb_rssi=0.0;
   glb_rssi= (double) WiFi.RSSI();
-
-  SerPrintfLn("WiFi RSSI: " + String(glb_rssi) + "dBm");
    
   return 0; 
 }
@@ -212,10 +213,9 @@ void send_data_to_collectd (void)
  int s=0; 
 
  //metric packet to send to collectd for detailed readings
-  struct collectd_packet *packet = collectd_init_packet((char*) ESPName, 32768);
+  struct collectd_packet *packet = collectd_init_packet((char*) ESPName, 1024);
 
-  Serial.println("\nPreparing collected packet...");
-  WebSerial.println("\nPreparing collected packet...");
+  SerPrintfLn("\nPreparing collected packet...");
 
   collectd_add_numeric(packet, TYPE_TIME, now());
   collectd_add_string(packet, TYPE_PLUGIN,(char*) "sensor");
@@ -292,7 +292,7 @@ void send_data_to_collectd (void)
       if (udp_handler.endPacket() == 1) {
         // SUCCESS: Packet is on its way out of the antenna
        SerPrintfLn("UDP Sent OK");
-        delay(30);  // Let the physical hardware finish transmitting
+       delay(30);  // Let the physical hardware finish transmitting
       } else {
         // Hardware/Routing error (e.g., ARP resolution failed)
         SerPrintfLn("UDP Sent failed!!!");
@@ -407,9 +407,9 @@ bool decode_telegram(int len)
         validCRCFound = (strtol(messageCRC, NULL, 16) == currentCRC);
 
         if (validCRCFound)
-            Serial.println(F("CRC Valid!"));
+            SerPrintfLn("CRC Valid!");
         else {
-            Serial.println(F("CRC Invalid!"));
+            SerPrintfLn("CRC Invalid!");
         }
 
         currentCRC = 0;
@@ -608,8 +608,8 @@ void processLine(int len) {
 
     bool result = decode_telegram(len + 1);
 
-    if (!result) {
-      Serial.print("\nFailed to decoce serial data...");
+    if (result) {
+      SerPrintfLn("Decoded telegram...");
     }
 }
 
@@ -617,23 +617,24 @@ void read_p1_hardwareserial()
 {
     if (Serial.available())
     {
-        Serial.print("\nReading serial data...\n");
+        SerPrintfLn("\nReading telegram...\n");
         memset(telegram, 0, sizeof(telegram));
         
         Serial.setTimeout(5000);
 
         while (Serial.available())
         {
+            yield();
             ESP.wdtDisable();
             int len = Serial.readBytesUntil('\n', telegram, P1_MAXLINELENGTH);
             ESP.wdtEnable(1);
 
             if (len == 0) {
-              Serial.print("Empty P1 telegram.\n");
+              SerPrintfLn("Empty P1 telegram.\n");
               break;
             }
             else {
-              WebSerial.printf("P1 telegram received: %s\n",telegram);
+              SerPrintfLn("P1 telegram received: %s",telegram);
               processLine(len);
             }
         }
@@ -660,16 +661,16 @@ void setup()
     
   // Connect to WiFi
   WiFi.begin(WifiSSID, WifiPass);
+  //WiFi.setSleepMode(WIFI_NONE_SLEEP);
+
+  //Lower power to reduce power spikes
+  WiFi.setOutputPower(17.5);
+
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
     //Too many failures -> ESP.reset();
   }
-  Serial.println("");
-  Serial.println("WiFi connected");
-
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
 
   //WebSerial
   WebSerial.begin(&server);
@@ -677,8 +678,8 @@ void setup()
   WebSerial.onMessage(recvMsg);
   server.begin();
 
-  WebSerial.print(F("IP address: "));
-  WebSerial.println(WiFi.localIP().toString());
+  SerPrintfLn("\nWiFi connected");
+  SerPrintfLn("IP Address: " + WiFi.localIP().toString());
 
   //OTA Check
   checkForUpdates();
@@ -695,8 +696,10 @@ void setup()
   //Init collectd UDP client
   udp_handler.begin(atoi(CollectdPort)); 
 
-  Serial.println("Read loop started");
-  WebSerial.printf("Read loop started");
+  SerPrintfLn("Read loop started");
+
+  //disable serial debug until enable via WebSerial
+   glb_debug=false;
 }
 
 // **********************************
@@ -705,14 +708,9 @@ void setup()
 
 void loop()
 {  
-  events();
-
   long now = millis();
-
-  // always read serial
-  if (Serial.available() > 0) {
-    read_p1_hardwareserial();
-  }
+  float voltage = 0.0;
+  events();
 
   if (now - LAST_UPDATE_SENT > UPDATE_INTERVAL ) {
     // Length (with one extra character for the null terminator)
@@ -720,21 +718,20 @@ void loop()
     myTZ.dateTime("G:i").toCharArray(time_chbuf,str_len);
 
     read_p1_hardwareserial();
+
+    voltage = ESP.getVcc() / 1000.0;
     getRSSI();
 
-    Serial.printf("\nTime now: %sZ\nReading BME280 sensor values\n",time_chbuf);
-    WebSerial.printf("\nTime now: %sZ\nReading BME280 sensor values\n",time_chbuf);
-  
-    ReadTempSensor(); 
+    SerPrintfLn("\nVoltage: %.2f V | RSSI: %f dBm | Current Free Heap: %u bytes\n",voltage, glb_rssi, ESP.getFreeHeap());
+    Serial.printf("\nTime now: %sZ, Uptime: %lu ms\nReading BME280 sensor values\n",time_chbuf, now);
+    WebSerial.printf("\nTime now: %sZ,Uptime: %lu ms\nReading BME280 sensor values\n",time_chbuf, now);
 
+    ReadTempSensor();
     // Only send measurements if we have data
     if (CONSUMPTION > 0) {
       send_data_to_collectd();
     }
     
     LAST_UPDATE_SENT = millis();
-
-    //Small sleep
-    delay (10);
-    }  
+  }
 }

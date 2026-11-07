@@ -10,7 +10,7 @@ const char* NTPServer = "fi.pool.ntp.org";
 
 const IPAddress CollectdIP = {192,168,255,3};
 const char* CollectdPort = "25826";
-const char* FWVersion = "01082026";
+const char* FWVersion = "07112026";
 
 // Update treshold in milliseconds, messages will only be sent on this interval
 #define UPDATE_INTERVAL 30000  // 30s
@@ -25,7 +25,7 @@ const char* FWVersion = "01082026";
 // #define SERIAL_TX TX
 
 // * Max telegram length
-#define P1_MAXLINELENGTH 1050
+#define P1_MAXLINELENGTH 1472
 
 // * The hostname of our little creature
 #define HOSTNAME "p1meter"
