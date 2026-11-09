@@ -1,4 +1,4 @@
-'
+
 /**
  * ESP8266 Power Meter HAN-Port H1 reader with collectd (Telegraf/influxDB 1.x) integration.
  *
@@ -215,6 +215,11 @@ void send_data_to_collectd (void)
  //metric packet to send to collectd for detailed readings
   struct collectd_packet *packet = collectd_init_packet((char*) ESPName, 1024);
 
+  if (packet == NULL) {
+    SerPrintfLn("ERROR: collectd packet allocation failed!");
+    return;
+  }
+
   SerPrintfLn("\nPreparing collected packet...");
 
   collectd_add_numeric(packet, TYPE_TIME, now());
@@ -303,7 +308,8 @@ void send_data_to_collectd (void)
     }
   }
 
-  collectd_reset_packet(packet,(char*)ESPName);
+  collectd_free_packet(packet);
+  packet = NULL;
 }
 
 // **********************************
